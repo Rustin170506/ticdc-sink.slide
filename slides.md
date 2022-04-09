@@ -60,31 +60,32 @@ h1 {
 
 <div>
 
-```plantuml {scale: 0.8}
+```plantuml {scale: 0.9}
 @startuml
 
 package "TiKV" {
   gRPC - [TiKV CDC]
 }
 
-node "Owner Capture" {
+node "Owner" {
   [OwnerDDLPuller] --> [gRPC]
   [DDLSink]
   [DDLMounter]
   [Scheduler]
 }
 
-node "Processor Capture" {
+node "Processor" {
   [ProcessorDDLPuller] --> [gRPC]
+  [ProcessorDDLMounter]
   [ProcessorMounter]
   [ProcessorSink]
   package "Changefeed1" {
-    package "Table Pipeline1" {
+    package "Table1 Pipeline" {
       [Puller1] --> [gRPC]
       [Sorter1]
       [TableSink1]
     }
-    package "Table Pipeline2" {
+    package "Table2 Pipeline" {
       [Puller2] --> [gRPC]
       [Sorter2]
       [TableSink2]
@@ -108,7 +109,7 @@ database "MySQL/Kafka" {
 [TableSink1] ..> [ProcessorSink] : use
 [TableSink2] ..> [ProcessorSink] : use
 [ProcessorDDLPuller] --> [ProcessorSink]
-[ProcessorDDLPuller] ..> [ProcessorMounter] : use
+[ProcessorDDLPuller] ..> [ProcessorDDLMounter] : use
 [Puller1] --> [Sorter1]
 [Sorter1] --> [TableSink1]
 [Puller2] --> [Sorter2]
@@ -363,24 +364,117 @@ type Sink interface {
 
 <div>
 
-## Global Sink
+## Processor Level Sink
 <br/>
 
 - BlackHole Sink: Do nothing
 - MQSink: For MQ
 - MySQLSink: For MySQL
+- Buffer Sink: Buffer + Asynchronously
 
 </div>
 <div>
 
-## Internal Sink
+## Table Level Sink
 <br/>
 
-- Buffer Sink: Buffer + Asynchronously
 - Table Sink: Sink Minimum Management Unit
 
 </div>
 
 </div>
 
+---
 
+<div class="relation">
+
+<div class="title">
+
+# Relations
+
+</div>
+<div class="uml">
+
+```plantuml {scale: 1}
+@startuml
+
+package "TiKV" {
+  gRPC - [TiKV CDC]
+}
+
+node "Processor" {
+  [ProcessorMounter]
+  package "Changefeed1" {
+    package "Table1 Pipeline" {
+      [Puller1] --> [gRPC]
+      [Sorter1]
+      [TableSink1] #Yellow
+    }
+    package "Table2 Pipeline" {
+      [Puller2] --> [gRPC]
+      [Sorter2]
+      [TableSink2] #Yellow
+    }
+    package "Sink Manager" {
+      folder "Combination" as Combination {
+        [MQSink] #FF6655
+        [BufferSink] #FF6655
+      }
+    }
+  }
+}
+
+database "Kafka" {
+  [Broker]
+}
+
+note right of [MQSink]
+  It can be either 
+  MySQL Sink or BlackHoleSink.
+end note
+
+[MQSink] --> [Broker]
+[Sorter1] ..> [ProcessorMounter] : use
+[Sorter2] ..> [ProcessorMounter] : use
+[TableSink1] ..> Combination : use
+[TableSink2] ..> Combination : use
+[Puller1] --> [Sorter1]
+[Sorter1] --> [TableSink1]
+[Puller2] --> [Sorter2]
+[Sorter2] --> [TableSink2]
+@enduml
+```
+
+</div>
+</div>
+
+<style>
+.relation {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.relation img {
+  height: 500px;
+}
+
+.relation .title {
+  flex-grow: 4;
+}
+
+.relation .uml {
+  flex-grow: 2;
+}
+
+h1 {
+  background-color: #2B90B6;
+  background-image: linear-gradient(45deg, #4EC5D4 10%, #146b8c 20%);
+  background-size: 50%;
+  -webkit-background-clip: text;
+  -moz-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -moz-text-fill-color: transparent;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+</style>
