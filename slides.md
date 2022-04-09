@@ -22,25 +22,118 @@ Focus on MQ Sink.
 </div>
 
 ---
+layout: center
+---
 
-# Agenda
+# Table pipeline
+<br>
 
-- **Table pipeline**
-- **Sink Interface**
-- **Sink Implement**
-- **MQ Sink**
+# Sink Interface
 <br>
+
+# Sink Implement
 <br>
+
+# MQ Sink
+
 
 <style>
 h1 {
   background-color: #2B90B6;
   background-image: linear-gradient(45deg, #4EC5D4 10%, #146b8c 20%);
-  background-size: 100%;
+  background-size: 50%;
   -webkit-background-clip: text;
   -moz-background-clip: text;
   -webkit-text-fill-color: transparent;
   -moz-text-fill-color: transparent;
+}
+</style>
+
+---
+
+<div class="arch">
+<div>
+
+# Architecture
+
+</div>
+
+<div>
+
+```plantuml {scale: 0.8}
+@startuml
+
+package "TiKV" {
+  gRPC - [TiKV CDC]
+}
+
+node "Owner Capture" {
+  [OwnerDDLPuller] --> [gRPC]
+  [DDLSink]
+  [DDLMounter]
+  [Scheduler]
+}
+
+node "Processor Capture" {
+  [ProcessorDDLPuller] --> [gRPC]
+  [ProcessorMounter]
+  [ProcessorSink]
+  package "Changefeed1" {
+    package "Table Pipeline1" {
+      [Puller1] --> [gRPC]
+      [Sorter1]
+      [TableSink1]
+    }
+    package "Table Pipeline2" {
+      [Puller2] --> [gRPC]
+      [Sorter2]
+      [TableSink2]
+    }
+  }
+}
+
+database "MySQL/Kafka" {
+  [MySQL]
+  [Broker]
+}
+
+[DDLSink] --> [MySQL]
+[DDLSink] --> [Broker]
+[OwnerDDLPuller] --> [DDLSink]
+[OwnerDDLPuller] ..> [DDLMounter] : use
+[ProcessorSink] --> [MySQL]
+[ProcessorSink] --> [Broker]
+[Sorter1] ..> [ProcessorMounter] : use
+[Sorter2] ..> [ProcessorMounter] : use
+[TableSink1] ..> [ProcessorSink] : use
+[TableSink2] ..> [ProcessorSink] : use
+[ProcessorDDLPuller] --> [ProcessorSink]
+[ProcessorDDLPuller] ..> [ProcessorMounter] : use
+[Puller1] --> [Sorter1]
+[Sorter1] --> [TableSink1]
+[Puller2] --> [Sorter2]
+[Sorter2] --> [TableSink2]
+@enduml
+```
+
+</div>
+</div>
+
+<style>
+.arch {
+  display: flex;
+}
+
+h1 {
+  background-color: #2B90B6;
+  background-image: linear-gradient(45deg, #4EC5D4 10%, #146b8c 20%);
+  background-size: 50%;
+  -webkit-background-clip: text;
+  -moz-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -moz-text-fill-color: transparent;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
 }
 </style>
 
@@ -211,7 +304,7 @@ type RowChangedEvent struct {
 
 # Sink
 
-Sink is responsible for sending data to Mysql or Kafka.
+Sink is responsible for sending data to MySQL or Kafka.
 
 <div class="sink">
 
@@ -231,3 +324,63 @@ flowchart LR
   align-items: center;
 }
 </style>
+
+---
+
+# Sink Interface
+
+<br/>
+<br/>
+<br/>
+
+```go {all|6}
+type Sink interface {
+	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
+
+	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
+
+	FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
+
+	// Only for MQ Sink.
+	EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error
+
+	Close(ctx context.Context) error
+
+	// Only for MySQL Sink.
+	Barrier(ctx context.Context, tableID model.TableID) error
+}
+```
+
+---
+
+# Sink Implement
+
+<br/>
+<br/>
+<br/>
+
+<div grid="~ cols-2 gap-4">
+
+<div>
+
+## Global Sink
+<br/>
+
+- BlackHole Sink: Do nothing
+- MQSink: For MQ
+- MySQLSink: For MySQL
+
+</div>
+<div>
+
+## Internal Sink
+<br/>
+
+- Buffer Sink: Buffer + Asynchronously
+- Table Sink: Sink Minimum Management Unit
+
+</div>
+
+</div>
+
+
