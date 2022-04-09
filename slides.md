@@ -433,7 +433,7 @@ note right of [MQSink]
   MySQL Sink or BlackHoleSink.
 end note
 
-[MQSink] --> [Broker]
+Combination --> [Broker]
 [Sorter1] ..> [ProcessorMounter] : use
 [Sorter2] ..> [ProcessorMounter] : use
 [TableSink1] ..> Combination : use
@@ -474,6 +474,84 @@ h1 {
   -moz-background-clip: text;
   -webkit-text-fill-color: transparent;
   -moz-text-fill-color: transparent;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+</style>
+
+---
+
+# Data Sequence
+
+## Row Change Data Sequence
+
+<br/>
+
+```plantuml {scale: 0.9}
+@startuml
+SinkNode -> TableSink: calls emitRowToSink
+SinkNode <-- TableSink: Added to buffer
+SinkNode -> TableSink: SinkNode calls FlushRowChangedEvents
+TableSink -> ProcessorSink: calls EmitRowChangedEvents
+TableSink <-- ProcessorSink: Added to buffer
+loop BufferSink
+  ProcessorSink -> ProcessorSink: BufferSink cache is full
+  ProcessorSink -> Producer: calls EmitRowChangedEvents of MQSink
+end
+Producer -> LeaderBroker: Async send
+Producer <-- LeaderBroker: ACK
+
+note over of ProcessorSink
+  It is a combination of BufferSink and MQSink.
+end note
+@enduml
+```
+
+---
+
+# Data Sequence
+
+<div class="seq">
+<div>
+
+## Resolved TS Flush Sequence
+
+</div>
+<div>
+
+```plantuml {scale: 0.8}
+@startuml
+SinkNode -> TableSink: calls flushSink
+TableSink -> ProcessorSink: calls flushBackendSink
+TableSink <-- ProcessorSink: flush msg sent
+Producer -> LeaderBroker: Async send
+Producer <-- LeaderBroker: ACK
+loop BufferSink
+  ProcessorSink -> ProcessorSink: BufferSink flush cache is full and calls FlushRowChangedEvents of MQSink
+end
+loop MQSink
+  ProcessorSink -> ProcessorSink: bgFlushTs receives Resolved TS
+  group Flush 
+    ProcessorSink -> Producer: calls Flush
+    Producer -> Producer: Waiting for all msgs ACK
+    ProcessorSink <-- Producer: Flushed
+  end
+end
+note over of ProcessorSink
+  It is a combination of BufferSink and MQSink.
+end note
+@enduml
+```
+
+</div>
+</div>
+
+<style>
+.seq {
+  display: flex;
+}
+
+h2 {
   writing-mode: vertical-rl;
   text-orientation: mixed;
 }
