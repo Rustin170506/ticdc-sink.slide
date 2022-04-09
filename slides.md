@@ -1,6 +1,7 @@
 ---
 theme: seriph
 class: 'text-center'
+background: https://source.unsplash.com/collection/94734566/1920x1080
 highlighter: shiki
 lineNumbers: false
 info: |
