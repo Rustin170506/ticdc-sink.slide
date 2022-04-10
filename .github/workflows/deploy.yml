@@ -16,5 +16,6 @@ jobs:
         uses: crazy-max/ghaction-github-pages@v2
         with:
           build_dir: dist
+          fqdn: ticdc-sink.slides.hi-rustin.rs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
