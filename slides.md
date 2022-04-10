@@ -36,6 +36,9 @@ layout: center
 <br>
 
 # MQ Sink
+<br>
+
+# A dead lock
 
 
 <style>
@@ -667,3 +670,45 @@ group EmitCheckpointTs
 end
 @enduml
 ```
+
+---
+
+# A dead lock
+
+<div class="lock">
+
+- [Introduced by #4633](https://github.com/pingcap/tiflow/pull/4633)
+
+- [Fixed by #4996](https://github.com/pingcap/tiflow/pull/4996)
+
+</div>
+
+<style>
+.lock {
+  height: 300px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+</style>
+
+---
+
+# Reference
+
+<div class="ref">
+
+- [TiCDC Architecture](https://docs.google.com/document/d/1gFuvghFOj7OQJqrRSu0LvpMkc9OIL3SbJLTZnBiXehI/edit#)
+- [TiCDC multi topic support spec](https://docs.google.com/document/d/15_sivJJzkGO5rCa6uIEyK8mEfzESZpazhWERIY7ZMRs/edit?n=Product_Requirements_Document_Template#heading=h.e4xetqrggxp7)
+- [Kafka Producer topic support design](https://docs.google.com/document/d/1bxjq452BS-HoflmsZt-hwMK66GDULpxpOfIVcxQN2hg/edit#heading=h.vvfuksgfwg59)
+
+</div>
+
+<style>
+.ref {
+  height: 300px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+</style>
