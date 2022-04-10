@@ -557,3 +557,113 @@ h2 {
   text-orientation: mixed;
 }
 </style>
+
+---
+
+# MQ Sink
+
+```plantuml {scale: 1}
+@startuml
+class mqSink {
+  mqProducer       producer.Producer
+  __
+  eventRouter      *dispatcher.EventRouter
+  __
+  topicManager     manager.TopicManager
+  __
+  flushWorker      *flushWorker
+  ==
+  EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
+  __
+  EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
+  __
+  FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
+  __
+  EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error
+  __
+  Close(ctx context.Context) error
+}
+class Producer
+class EventRouter
+class TopicManager
+class flushWorker
+
+mqSink *-- Producer : use
+mqSink *-- EventRouter : use
+mqSink *-- TopicManager : use
+mqSink *-- flushWorker : use
+@enduml
+```
+
+---
+
+# Row Change Data Sequence
+
+```plantuml
+@startuml
+group EmitRowChangedEvents 
+  ProcessorSink -> MQSink: calls EmitRowChangedEvents
+  MQSink -> EventRouter: calls GetTopicForRowChange
+  MQSink <-- EventRouter: returns topic by schema and table name
+  MQSink -> TopicManager: calls Partitions with topic name
+  MQSink <-- TopicManager: returns number of partitions
+  MQSink -> FlushWorker: calls addEvent with topic name and number of partitions
+  MQSink <-- FlushWorker: added to buffer
+end
+loop FlushLoop 
+FlushWorker -> FlushWorker: timeout or buffer is full
+FlushWorker -> Producer: calls AsyncSendMessage
+end
+Producer -> Broker: async send
+Producer <-- Broker: ACK
+@enduml
+```
+
+---
+
+# Resolved TS Sequence
+
+```plantuml {scale: 0.8}
+@startuml
+group FlushRowChangedEvents 
+  ProcessorSink -> MQSink: calls FlushRowChangedEvents
+  ProcessorSink <-- MQSink: added to buffer chan
+end
+MQSink -> MQSink: receives a resolved msg
+MQSink <-- FlushWorker: calls addEvent with resolved event
+Producer -> Broker: async send
+Producer <-- Broker: ACK
+loop FlushLoop 
+FlushWorker -> FlushWorker: receives a resolved event
+  group Flush 
+    FlushWorker -> Producer: calls Flush
+    Producer -> Producer: Waiting for all msgs ACK
+    FlushWorker <-- Producer: Flushed
+  end
+end
+@enduml
+```
+
+--- 
+
+# Checkpoint TS Sequence
+
+```plantuml {scale: 1}
+@startuml
+group EmitCheckpointTs 
+  DDLSink -> MQSink: calls EmitCheckpointTs
+  MQSink -> EventRouter: calls GetDefaultTopic or GetActiveTopics by tables
+  MQSink <-- EventRouter: returns topic(s) by schema and table name(s)
+  loop 
+    MQSink -> TopicManager: calls Partitions with topic name
+    MQSink <-- TopicManager: returns number of partitions
+    group SyncBroadcastMessage
+      MQSink -> Producer: calls SyncBroadcastMessage
+      Producer -> Broker: sync send
+      Producer <-- Broker: ACK
+      MQSink <-- Producer: sent
+    end 
+  end
+end
+@enduml
+```
