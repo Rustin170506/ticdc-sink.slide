@@ -10,5 +10,8 @@
     "@slidev/theme-default": "*",
     "@slidev/theme-seriph": "*"
   },
-  "name": "ticdc-sink"
+  "name": "ticdc-sink",
+  "devDependencies": {
+    "playwright-chromium": "^1.20.2"
+  }
 }
