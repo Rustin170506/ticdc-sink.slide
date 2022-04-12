@@ -2,7 +2,7 @@
 theme: seriph
 class: 'text-center'
 download: true
-background: https://source.unsplash.com/collection/94734566/1920x1080
+background: https://user-images.githubusercontent.com/29879298/162908536-c61ef0c1-5bb7-44a2-b971-71031fc24d37.png
 highlighter: shiki
 lineNumbers: false
 info: |
@@ -11,6 +11,7 @@ info: |
   Learn more at [TiFlow](https://github.com/pingcap/tiflow/tree/master/cdc/sink)
 drawings:
   persist: false
+preload: false
 ---
 
 # TiCDC Sink Component
@@ -60,6 +61,17 @@ h1 {
 <div>
 
 # Architecture
+
+</div>
+
+<div
+  class="relation"
+>
+
+- A TiCDC cluster has only one owner.
+- A capture will have multiple processors.
+- A processor can only process one changefeed.
+- A changefeed can synchronize multiple tables.
 
 </div>
 
@@ -128,6 +140,13 @@ database "MySQL/Kafka" {
 <style>
 .arch {
   display: flex;
+}
+
+.relation {
+  position: absolute;
+  z-index: 1;
+  left: 400px;
+  top: 400px;
 }
 
 h1 {
