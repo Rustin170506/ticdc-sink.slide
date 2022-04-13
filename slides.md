@@ -174,7 +174,7 @@ h1 {
 
 # Table Pipeline
 
-Each changefeed creates a processor, and each processor maintains a table pipeline.
+Each changefeed creates a processor, and each processor maintains multiple table pipelines.
 
 ### Pipeline
 <br>
