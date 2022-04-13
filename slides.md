@@ -40,7 +40,7 @@ layout: center
 # MQ Sink
 <br>
 
-# A dead lock
+# Code View
 
 
 <style>
@@ -77,7 +77,7 @@ h1 {
 
 <div>
 
-```plantuml {scale: 0.9}
+```plantuml {scale: 0.8}
 @startuml
 
 package "TiKV" {
@@ -85,17 +85,21 @@ package "TiKV" {
 }
 
 node "Owner" {
-  [OwnerDDLPuller] --> [gRPC]
-  [DDLSink]
-  [DDLMounter]
   [Scheduler]
+  [DDLSink]
+  package "DDL" as DDL1 {
+    [OwnerSchemaStorage]
+    [OwnerDDLPuller] --> [gRPC]
+  }
 }
 
 node "Processor" {
-  [ProcessorDDLPuller] --> [gRPC]
-  [ProcessorDDLMounter]
   [ProcessorMounter]
   [ProcessorSink]
+  package "DDL" as DDL2 {
+    [ProcessorSchemaStorage]
+    [ProcessorDDLPuller] --> [gRPC]
+  }
   package "Changefeed1" {
     package "Table1 Pipeline" {
       [Puller1] --> [gRPC]
@@ -117,16 +121,15 @@ database "MySQL/Kafka" {
 
 [DDLSink] --> [MySQL]
 [DDLSink] --> [Broker]
-[OwnerDDLPuller] --> [DDLSink]
-[OwnerDDLPuller] ..> [DDLMounter] : use
+DDL1 --> [DDLSink]
+[OwnerSchemaStorage] ..> [OwnerDDLPuller] : use
 [ProcessorSink] --> [MySQL]
 [ProcessorSink] --> [Broker]
 [Sorter1] ..> [ProcessorMounter] : use
 [Sorter2] ..> [ProcessorMounter] : use
 [TableSink1] ..> [ProcessorSink] : use
 [TableSink2] ..> [ProcessorSink] : use
-[ProcessorDDLPuller] --> [ProcessorSink]
-[ProcessorDDLPuller] ..> [ProcessorDDLMounter] : use
+[ProcessorMounter] ..> DDL2 : use
 [Puller1] --> [Sorter1]
 [Sorter1] --> [TableSink1]
 [Puller2] --> [Sorter2]
@@ -142,11 +145,16 @@ database "MySQL/Kafka" {
   display: flex;
 }
 
+.arch img {
+  margin-top: -80px;
+}
+
 .relation {
   position: absolute;
   z-index: 1;
-  left: 400px;
-  top: 400px;
+  left: 120px;
+  top: 60px;
+  font-size: 12px;
 }
 
 h1 {
@@ -172,9 +180,9 @@ Each changefeed creates a processor, and each processor maintains a table pipeli
 <br>
 <br>
 
-```mermaid {scale: 2}
+```mermaid {scale: 1.5}
 flowchart LR
-    puller((Puller)) --> sorter((Sorter)) --> mounter((Mounter)) --> sink((Sink))
+    puller((PullerNode)) --> sorter((SorterNode)) --> mounter((Mounter)) --> sink((SinkNode))
 ```
 
 ---
@@ -384,7 +392,15 @@ type Sink interface {
 <br/>
 <br/>
 
-<div grid="~ cols-2 gap-4">
+<div grid="~ cols-3 gap-4">
+<div>
+
+## Owner Level Sink
+<br/>
+
+- DDL Sink: Sync DDL
+
+</div>
 
 <div>
 
@@ -513,13 +529,14 @@ h1 {
 
 ```plantuml {scale: 0.9}
 @startuml
-SinkNode -> TableSink: calls emitRowToSink
-SinkNode <-- TableSink: Added to buffer
-SinkNode -> TableSink: SinkNode calls FlushRowChangedEvents
+SinkNode <- SinkNode: added to buffer
+SinkNode -> TableSink: buffer is full and SinkNode calls EmitRowChangedEvents
+SinkNode <-- TableSink: added to buffer
+SinkNode -> TableSink: calls FlushRowChangedEvents
 TableSink -> ProcessorSink: calls EmitRowChangedEvents
-TableSink <-- ProcessorSink: Added to buffer
+TableSink <-- ProcessorSink: added to buffer
 loop BufferSink
-  ProcessorSink -> ProcessorSink: BufferSink cache is full
+  ProcessorSink -> ProcessorSink: BufferSink buffer is full
   ProcessorSink -> Producer: calls EmitRowChangedEvents of MQSink
 end
 Producer -> LeaderBroker: Async send
@@ -545,13 +562,13 @@ end note
 
 ```plantuml {scale: 0.8}
 @startuml
-SinkNode -> TableSink: calls flushSink
+SinkNode -> TableSink: calls FlushRowChangedEvents
 TableSink -> ProcessorSink: calls flushBackendSink
 TableSink <-- ProcessorSink: flush msg sent
 Producer -> LeaderBroker: Async send
 Producer <-- LeaderBroker: ACK
 loop BufferSink
-  ProcessorSink -> ProcessorSink: BufferSink flush cache is full and calls FlushRowChangedEvents of MQSink
+  ProcessorSink -> ProcessorSink: BufferSink flush buffer is full and calls FlushRowChangedEvents of MQSink
 end
 loop MQSink
   ProcessorSink -> ProcessorSink: bgFlushTs receives Resolved TS
@@ -584,28 +601,14 @@ h2 {
 ---
 
 # MQ Sink
+<br/>
+<br/>
 
-```plantuml {scale: 1}
+<div class="classes">
+
+```plantuml {scale: 1.2}
 @startuml
-class mqSink {
-  mqProducer       producer.Producer
-  __
-  eventRouter      *dispatcher.EventRouter
-  __
-  topicManager     manager.TopicManager
-  __
-  flushWorker      *flushWorker
-  ==
-  EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
-  __
-  EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
-  __
-  FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
-  __
-  EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error
-  __
-  Close(ctx context.Context) error
-}
+class mqSink
 class Producer
 class EventRouter
 class TopicManager
@@ -617,6 +620,15 @@ mqSink *-- TopicManager : use
 mqSink *-- flushWorker : use
 @enduml
 ```
+</div>
+
+<style>
+.classes {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+</style>
 
 ---
 
@@ -630,7 +642,9 @@ group EmitRowChangedEvents
   MQSink <-- EventRouter: returns topic by schema and table name
   MQSink -> TopicManager: calls Partitions with topic name
   MQSink <-- TopicManager: returns number of partitions
-  MQSink -> FlushWorker: calls addEvent with topic name and number of partitions
+  MQSink -> EventRouter: calls GetPartitionForRowChange
+  MQSink <-- EventRouter: returns the partition
+  MQSink -> FlushWorker: calls addEvent with topic name and partition
   MQSink <-- FlushWorker: added to buffer
 end
 loop FlushLoop 
@@ -653,7 +667,7 @@ group FlushRowChangedEvents
   ProcessorSink <-- MQSink: added to buffer chan
 end
 MQSink -> MQSink: receives a resolved msg
-MQSink <-- FlushWorker: calls addEvent with resolved event
+MQSink --> FlushWorker: calls addEvent with resolved event
 Producer -> Broker: async send
 Producer <-- Broker: ACK
 loop FlushLoop 
@@ -692,25 +706,11 @@ end
 ```
 
 ---
+layout: center
+class: 'text-center'
+---
 
-# A dead lock
-
-<div class="lock">
-
-- [Introduced by #4633](https://github.com/pingcap/tiflow/pull/4633)
-
-- [Fixed by #4996](https://github.com/pingcap/tiflow/pull/4996)
-
-</div>
-
-<style>
-.lock {
-  height: 300px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-</style>
+# Code View
 
 ---
 
